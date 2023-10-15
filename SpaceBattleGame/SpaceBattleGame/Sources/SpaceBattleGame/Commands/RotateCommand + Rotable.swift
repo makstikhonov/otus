@@ -13,7 +13,7 @@ protocol Rotable {
     func setDirection(_ newDirection: Direction) throws
 }
 
-final class Rotate {
+final class RotateCommand: ICommand {
     let r: Rotable
     
     init(_ r: Rotable) {

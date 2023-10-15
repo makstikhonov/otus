@@ -5,6 +5,8 @@
 //  Created by Mакс T on 24.09.2023.
 //
 
+import Foundation
+
 struct Vector2D: Equatable {
     let x: Float
     let y: Float

@@ -13,7 +13,7 @@ protocol Movable {
     func setPosition(_ position: Vector2D) throws
 }
 
-final class Move {
+final class MoveCommand: ICommand {
     let m: Movable
     
     init(_ m: Movable) {

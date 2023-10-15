@@ -30,5 +30,5 @@ extension RotableAdapter: Rotable {
 
 enum RotablePropertyKey: String {
     case direction = "Direction"
-    case angularVelocity = "angularVelocity"
+    case angularVelocity = "AngularVelocity"
 }
