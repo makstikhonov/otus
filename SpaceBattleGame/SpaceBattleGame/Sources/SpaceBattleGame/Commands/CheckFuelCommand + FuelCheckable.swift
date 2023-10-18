@@ -24,7 +24,7 @@ final class CheckFuelCommand: ICommand {
         let fuelRemaining = try m.getFuelLevel() - m.getConsumption()
         guard fuelRemaining >= 0.0 else {
             exceptionCount = exceptionCount + 1
-            throw CheckFuelError.noFuelToBurn(exceptionCount)
+            throw CheckFuelError.noFuelToBurn(exceptionCount - 1)
         }
     }
 }
