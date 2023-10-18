@@ -1,4 +1,6 @@
 import XCTest
+import Foundation
+
 @testable import SpaceBattleGame
 
 final class SpaceBattleGameTests: XCTestCase {
@@ -78,7 +80,7 @@ final class SpaceBattleGameTests: XCTestCase {
         let rotate = RotateCommand(rotableAdapter)
         try rotate.execute()
         let delta = try rotableAdapter.getDirection() - startDirection
-
+        
         XCTAssertEqual(delta, Direction(number: 1))
     }
     
@@ -230,7 +232,7 @@ final class SpaceBattleGameTests: XCTestCase {
         XCTAssertThrowsError(try checkFuel.execute()) { error in
             XCTAssertEqual(
                 error as? CheckFuelError,
-                CheckFuelError.noFuelToBurn
+                CheckFuelError.noFuelToBurn()
             )
         }
     }
@@ -258,7 +260,7 @@ final class SpaceBattleGameTests: XCTestCase {
         while !queue.isEmpty {
             XCTAssertThrowsError(try queue.take().execute()) { error in
                 cmd.inject(cmd: EmptyCommand())
-                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn)
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
             }
         }
     }
@@ -298,7 +300,7 @@ final class SpaceBattleGameTests: XCTestCase {
                 try queue.take().execute()
             } catch {
                 cmd.inject(cmd: EmptyCommand())
-                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn)
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
                 XCTAssertEqual(position, Vector2D(x: 27.0, y: 29.0))
                 XCTAssertEqual(fuel, 1.0)
             }
@@ -351,10 +353,174 @@ final class SpaceBattleGameTests: XCTestCase {
                 try queue.take().execute()
             } catch {
                 cmd.inject(cmd: EmptyCommand())
-                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn)
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
                 XCTAssertEqual(position, Vector2D(x: 27.0, y: 29.0))
                 XCTAssertEqual(direction, Direction(number: 3))
                 XCTAssertEqual(fuel, 1.0)
+            }
+        }
+    }
+    
+    // Exception handler tests
+    
+    private func putTestCommandInTheQueue() -> Queue {
+        let properties: [String: Float] = [
+            "FuelConsumption": 12.0,
+            "FuelLevel": 10.0
+        ]
+        let testSpaceShip = TestSpaceShip(properties: properties)
+        let fuelCheckableAdapter = FuelCheckableAdapter(o: testSpaceShip)
+        let checkFuel = CheckFuelCommand(fuelCheckableAdapter)
+        let queue = Queue()
+        queue.put(checkFuel)
+        return queue
+    }
+    
+    func testExceptionHandlerLogCommand() {
+        let queue = putTestCommandInTheQueue()
+        let store: [String: [String: (ICommand, Error) -> ICommand]] = [
+            // Реализовать Команду, которая записывает информацию о выброшенном исключении в лог.
+            "\(CheckFuelCommand.self)": [
+                "\(CheckFuelError.self).\(CheckFuelError.noFuelToBurn().self)": { (cmd: ICommand, e: Error) -> ICommand in
+                    let logger = Logger()
+                    let logCommand = ExceptionLogCommand(loggable: logger, exception: e)
+                    return logCommand
+                }
+            ]
+        ]
+        
+        let exceptionHandler = ExceptionHandler()
+        exceptionHandler.store = store
+        
+        while !queue.isEmpty {
+            let command = queue.take()
+            do {
+                try command.execute()
+            } catch {
+                let logCommand = exceptionHandler.handle(e: error, cmd: command)
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
+                XCTAssertEqual(logCommand is ExceptionLogCommand, true)
+                try? logCommand.execute()
+            }
+        }
+    }
+    
+    func testExceptionHandlerLogCommandInTheQueue() {
+        let queue = putTestCommandInTheQueue()
+        let store: [String: [String: (ICommand, Error) -> ICommand]] = [
+            // Реализовать обработчик исключения, который ставит Команду, пишущую в лог в очередь Команд.
+            "\(CheckFuelCommand.self)": [
+                "\(CheckFuelError.self).\(CheckFuelError.noFuelToBurn().self)": { (cmd: ICommand, e: Error) -> ICommand in
+                    let logger = Logger()
+                    let logCommand = ExceptionLogCommand(loggable: logger, exception: e)
+                    let repeater = RepeatCommand(queue: queue, command: logCommand)
+                    return repeater
+                }
+            ]
+        ]
+        
+        let exceptionHandler = ExceptionHandler()
+        exceptionHandler.store = store
+        
+        while !queue.isEmpty {
+            let command = queue.take()
+            do {
+                try command.execute()
+            } catch {
+                try? exceptionHandler.handle(e: error, cmd: command).execute()
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
+                let nextCommand = queue.take()
+                XCTAssertEqual(nextCommand is ExceptionLogCommand, true)
+            }
+        }
+    }
+    
+    func testExceptionHandlerRepeatExceptionCommand() {
+        let queue = putTestCommandInTheQueue()
+        let store: [String: [String: (ICommand, Error) -> ICommand]] = [
+            //Реализовать Команду, которая повторяет Команду, выбросившую исключение.
+            "\(CheckFuelCommand.self)": [
+                "\(CheckFuelError.self).\(CheckFuelError.noFuelToBurn().self)": { (cmd: ICommand, e: Error) -> ICommand in
+                    return cmd
+                }
+            ],
+        ]
+        
+        let exceptionHandler = ExceptionHandler()
+        exceptionHandler.store = store
+        
+        while !queue.isEmpty {
+            let command = queue.take()
+            do {
+                try command.execute()
+            } catch {
+                let exceptionCommand = exceptionHandler.handle(e: error, cmd: command)
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
+                XCTAssertEqual(exceptionCommand is CheckFuelCommand, true)
+                try? exceptionCommand.execute()
+            }
+        }
+    }
+    
+    func testExceptionHandlerPutRepeatExceptionCommandInTheQueue() {
+        let queue = putTestCommandInTheQueue()
+        let store: [String: [String: (ICommand, Error) -> ICommand]] = [
+            // Реализовать обработчик исключения, который ставит в очередь Команду - повторитель команды, выбросившей исключение.
+            "\(CheckFuelCommand.self)": [
+                "\(CheckFuelError.self).\(CheckFuelError.noFuelToBurn().self)": { (cmd: ICommand, e: Error) -> ICommand in
+                    let repeater = RepeatCommand(queue: queue, command: cmd)
+                    return repeater
+                }
+            ],
+        ]
+        
+        let exceptionHandler = ExceptionHandler()
+        exceptionHandler.store = store
+        
+        while !queue.isEmpty {
+            let command = queue.take()
+            do {
+                try command.execute()
+            } catch {
+                try? exceptionHandler.handle(e: error, cmd: command).execute()
+                XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn())
+                let nextCommand = queue.take()
+                XCTAssertEqual(nextCommand is CheckFuelCommand, true)
+            }
+        }
+    }
+    
+    func testExceptionHandlerRepeatedException() {
+        let queue = putTestCommandInTheQueue()
+        let store: [String: [String: (ICommand, Error) -> ICommand]] = [
+            "\(CheckFuelCommand.self)": [
+                "\(CheckFuelError.self).\(CheckFuelError.noFuelToBurn(1).self)": { (cmd: ICommand, e: Error) -> ICommand in
+                    return cmd
+                },
+                "\(CheckFuelError.self).\(CheckFuelError.noFuelToBurn(2).self)": { (cmd: ICommand, e: Error) -> ICommand in
+                    let logger = Logger()
+                    let logCommand = ExceptionLogCommand(loggable: logger, exception: e)
+                    return logCommand
+                }
+            ]
+        ]
+        
+        let exceptionHandler = ExceptionHandler()
+        exceptionHandler.store = store
+        
+        while !queue.isEmpty {
+            let command = queue.take()
+            do {
+                try command.execute()
+            } catch {
+                let returnedCommand = exceptionHandler.handle(e: error, cmd: command)
+                if case let CheckFuelError.noFuelToBurn(code) = error, code == 1 {
+                    XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn(1))
+                    XCTAssertEqual(returnedCommand is CheckFuelCommand, true)
+                } else if case let CheckFuelError.noFuelToBurn(code) = error, code == 2 {
+                    XCTAssertEqual(error as? CheckFuelError, CheckFuelError.noFuelToBurn(2))
+                    XCTAssertEqual(returnedCommand is ExceptionLogCommand, true)
+                }
             }
         }
     }

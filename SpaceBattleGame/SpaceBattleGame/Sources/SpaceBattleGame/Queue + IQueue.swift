@@ -14,7 +14,7 @@ protocol IQueue {
 
 final class Queue: IQueue {
     private var commands: [ICommand] = []
-    private let queue = DispatchQueue(label: "commands.queue", attributes: .concurrent)
+    private let queue = DispatchQueue(label: "com.commands.queue", attributes: .concurrent)
     var isEmpty: Bool {
         queue.sync {
             return commands.isEmpty
